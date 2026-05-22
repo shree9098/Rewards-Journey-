@@ -72,7 +72,7 @@ def generate_yearly_sales_analysis(source_folder_path, output_folder_path):
     ).round(2).reset_index()
 
     # Create summary analysis file
-    output_file = output_folder / "Sales_Performance_Analysis_2025_2026.xlsx"
+    output_file = output_folder / "YUONE_SALES_ANALYSIS_2025_2026.xlsx"
     
     try:
         with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
