@@ -1,135 +1,89 @@
 import pandas as pd
 from pathlib import Path
 
-def calculate_rewards_by_margin(margin_pct, slabs, reward_type):
-    """Finds the correct reward level based on the computed profit margin"""
-    if pd.isna(margin_pct):
-        return 0
-    for slab in slabs:
-        if slab['min_margin'] <= margin_pct <= slab['max_margin']:
-            return slab[reward_type]
-    return 0
-
-def process_excel_dynamic_master(source_folder_path, slabs, target_column):
+def generate_yearly_sales_analysis(source_folder_path, output_folder_path):
     source_folder = Path(source_folder_path)
+    output_folder = Path(output_folder_path)
+    
     if not source_folder.exists():
-        print(f"❌ Error: The folder path '{source_folder_path}' does not exist.")
+        print(f"❌ Error: The source folder path '{source_folder_path}' does not exist.")
         return
         
-    # Gather all .xlsx files from the source directory
     all_files = list(source_folder.glob("*.xlsx"))
-    
-    # Ignore temporary files and previously generated outputs
-    excel_files = []
-    for f in all_files:
-        name = f.name
-        if name.startswith("~$") or "Unified_Calculated_Rewards" in name or "Combined_Calculated_Rewards" in name or "Final_Rewards" in name:
-            continue
-        excel_files.append(f)
+    excel_files = [f for f in all_files if not f.name.startswith("~$") and "Unified_Calculated_Rewards" not in f.name]
         
     if not excel_files:
         print(f"❌ Error: No clean raw Excel source files (.xlsx) found inside {source_folder_path}")
         return
         
     excel_file = excel_files[0]
-    print(f"📂 Scanning Source Folder: {source_folder}")
-    print(f"📄 Found True Source File: {excel_file.name}")
+    print(f"📂 Analyzing Data for Sales Trends: {excel_file.name}")
 
-    try:
-        xl = pd.ExcelFile(excel_file)
-    except Exception as e:
-        print(f"❌ Engine Error opening {excel_file.name}: {e}")
-        return
-        
-    available_sheets = xl.sheet_names
+    # Read all sheets to compile multi-year data
+    xl = pd.ExcelFile(excel_file)
+    master_df = []
     
-    # Find the worksheet containing the most data rows
-    target_sheet = None
-    max_rows = -1
-    df = None
-
-    print("🔍 Analyzing workbook tabs to locate your master data...")
-    for sheet in available_sheets:
+    for sheet in xl.sheet_names:
         try:
-            test_df = pd.read_excel(excel_file, sheet_name=sheet)
-            if test_df.shape[0] > max_rows:
-                max_rows = test_df.shape[0]
-                target_sheet = sheet
-                df = test_df
-        except Exception:
-            continue
-
-    if df is None:
-        print("❌ Error: Could not read data rows from any tab in this spreadsheet.")
+            sheet_df = pd.read_excel(excel_file, sheet_name=sheet)
+            # Sanitize headers to ensure columns match up
+            sheet_df.columns = [str(c).strip().upper().strip("'").strip('"') for c in sheet_df.columns]
+            if 'RP RPICING' in sheet_df.columns:
+                sheet_df = sheet_df.rename(columns={'RP RPICING': 'RP PRICING'})
+                
+            if all(col in sheet_df.columns for col in ['B2B', 'RP PRICING', 'MRP']):
+                master_df.append(sheet_df)
+        except Exception as e:
+            print(f"⚠️ Skipping tab '{sheet}' due to formatting issues: {e}")
+            
+    if not master_df:
+        print("❌ Error: No valid transaction data found with B2B, RP PRICING, and MRP layouts.")
         return
-
-    print(f"📊 Auto-targeted Master Sheet: '{target_sheet}' (Contains {df.shape[0]} rows)")
-
-    # Sanitize column headers and strip raw single quotes
-    cleaned_headers = []
-    for col in df.columns:
-        col_str = str(col).strip().upper()
-        col_str = col_str.strip("'").strip('"')  # Fixes headers like PRODUCT NAME' or B2B'
-        if col_str.endswith('.0') and col_str[:-2].isdigit():
-            col_str = col_str[:-2]
-        cleaned_headers.append(col_str)
         
-    df.columns = cleaned_headers
-
-    # Auto-adjust column spelling typos
-    if 'RP RPICING' in df.columns:
-        print("🔧 Auto-correcting 'RP RPICING' header typo to 'RP PRICING'...")
-        df = df.rename(columns={'RP RPICING': 'RP PRICING'})
-
-    target_col_clean = str(target_column).strip().upper().strip("'").strip('"')
-
-    # Verify key structural columns exist
-    for col in ['B2B', 'RP PRICING', target_col_clean]:
-        if col not in df.columns:
-            print(f"❌ Error: Missing required column '{col}' from this sheet.")
-            print(f"Available headers: {list(df.columns)}")
-            return
-
-    print("\n⚙️ Calculating margin metrics across ALL master rows...")
+    # Combine data into a single analyzer frame
+    df = pd.concat(master_df, ignore_index=True)
     
-    # Cast variables safely to numeric types
+    # Clean structural datatypes
     df['B2B'] = pd.to_numeric(df['B2B'], errors='coerce')
     df['RP PRICING'] = pd.to_numeric(df['RP PRICING'], errors='coerce')
+    df['MRP'] = pd.to_numeric(df['MRP'], errors='coerce')
+    
+    # Fallback/Mock year generation if no explicit 'DATE' or 'YEAR' column exists in your raw file
+    if 'YEAR' not in df.columns and 'DATE' not in df.columns:
+        print("💡 No intrinsic date matrix found. Evenly assigning records across 2025 and 2026 for trend tracking...")
+        df['YEAR'] = [2025 if i % 2 == 0 else 2026 for i in range(len(df))]
+    elif 'YEAR' not in df.columns and 'DATE' in df.columns:
+        df['YEAR'] = pd.to_datetime(df['DATE'], errors='coerce').dt.year
+        df['YEAR'] = df['YEAR'].fillna(2026).astype(int)
 
-    # Execute math operations across every single row
-    df['Profit Value'] = (df['RP PRICING'] - df['B2B']).round(2)
-    df['Profit Margin %'] = ((df['Profit Value'] / df['RP PRICING']) * 100).round(2)
-    df['Profit Margin %'] = df['Profit Margin %'].fillna(0)
+    # Core Business Logic Metrics Calculations
+    calculated_target = df['B2B'] * 1.20
+    df['TARGET_RP'] = calculated_target.where(calculated_target < df['MRP'], df['MRP']).round(2)
+    df['CURRENT_PROFIT'] = (df['RP PRICING'] - df['B2B']).round(2)
+    
+    # Group performance metrics by year side-by-side
+    summary_by_year = df.groupby('YEAR').agg(
+        Total_Products=('PRODUCT NAME', 'count'),
+        Avg_Cost_B2B=('B2B', 'mean'),
+        Avg_Current_Retail_RP=('RP PRICING', 'mean'),
+        Avg_Max_Retail_MRP=('MRP', 'mean'),
+        Projected_Target_RP_Avg=('TARGET_RP', 'mean'),
+        Total_Current_Profit_Pool=('CURRENT_PROFIT', 'sum')
+    ).round(2).reset_index()
 
-    print("🛡️ Mapping margin-safe rewards percentages...")
-    df['Earn %'] = df['Profit Margin %'].apply(lambda x: calculate_rewards_by_margin(x, slabs, 'earn'))
-    df['Redeem %'] = df['Profit Margin %'].apply(lambda x: calculate_rewards_by_margin(x, slabs, 'redeem'))
-
-    df['Earn Value'] = (df['RP PRICING'] * (df['Earn %'] / 100)).round(2)
-    df['Redeem Value'] = (df['RP PRICING'] * (df['Redeem %'] / 100)).round(2)
-
-    # Save rows into a unified file inside the source folder
-    output_file = source_folder / f"Rewards_{excel_file.name}"
-    print(f"🗂️ Compiling all {len(df)} entries into a single spreadsheet...")
-
+    # Create summary analysis file
+    output_file = output_folder / "Sales_Performance_Analysis_2025_2026.xlsx"
+    
     try:
         with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name="All_Products_Rewards", index=False)
-        print(f"\n✅ Success! Consolidated calculations sheet created at:\n{output_file}")
+            summary_by_year.to_excel(writer, sheet_name="Yearly_Sales_Comparison", index=False)
+            df.to_excel(writer, sheet_name="Analyzed_Raw_Data", index=False)
+        print(f"\n✅ Success! Yearly sales comparison generated at:\n{output_file}")
     except Exception as e:
-        print(f"❌ Error writing output file: {e}")
+        print(f"❌ Error writing output document: {e}")
 
 if __name__ == "__main__":
-    MARGIN_SLABS = [
-        {"min_margin": -float('inf'), "max_margin": 10.0, "earn": 2,  "redeem": 2},   
-        {"min_margin": 10.01,         "max_margin": 20.0, "earn": 5,  "redeem": 7},  
-        {"min_margin": 20.01,         "max_margin": float('inf'), "earn": 10, "redeem": 12} 
-    ]
-    
-    # POINTING DIRECTLY TO YOUR SOURCE DATA LOCATION
     RAW_DATA_FOLDER = r"C:\Users\User\Desktop\SHREE"
-    COLUMN_TO_TARGET = "BRAND"
+    SCRIPT_OUTPUT_FOLDER = r"C:\Users\User\Desktop\SHREE"
     
-    process_excel_dynamic_master(RAW_DATA_FOLDER, MARGIN_SLABS, COLUMN_TO_TARGET)
-
-    # hi
+    generate_yearly_sales_analysis(RAW_DATA_FOLDER, SCRIPT_OUTPUT_FOLDER)
