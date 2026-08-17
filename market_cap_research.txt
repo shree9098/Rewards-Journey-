@@ -1,0 +1,39 @@
+Consumer Electronics — E-commerce Market Snapshot
+
+Market: United States
+Category: Consumer electronics
+Estimated customer spending in 2026: $565 billion
+Expected growth from 2025: 3.7%
+Research checked: August 17, 2026
+
+What this means for an online seller
+
+U.S. customers are expected to spend about $565 billion on consumer technology products and services during 2026. The market is expected to grow by 3.7% compared with 2025, showing continued customer demand.
+
+Common products in this category include:
+- Smartphones and accessories
+- Laptops and computer accessories
+- Headphones, speakers, and other audio products
+- TVs and displays
+- Smart-home devices
+- Smartwatches and fitness wearables
+- Gaming products
+
+Important note
+
+An individual SKU does not have a “market cap.” In e-commerce, useful SKU-level measurements are:
+- Selling price
+- Units sold
+- Sales revenue
+- Conversion rate
+- Profit margin
+- Market share
+
+Simple example
+
+If an electronics SKU sells 1,000 units at $50 each, its gross sales revenue is $50,000. This is the type of number an e-commerce seller should compare with the larger category opportunity.
+
+Source
+
+Consumer Technology Association / CES: “CTA: Despite Tariffs and Economic Headwinds, U.S. Consumer Tech Revenue to Hit $565 Billion in 2026,” published January 4, 2026.
+https://www.ces.tech/press-releases/cta-despite-tariffs-and-economic-headwinds-us-consumer-tech-revenue-to-hit-565-billion-in-2026
